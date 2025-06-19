@@ -158,14 +158,77 @@
         tr:nth-child(odd) {
             background: #fff;
         }
+
+        body.dark-mode {
+            background: #181a1b;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .chat {
+            background: #23272a;
+            color: #e0e0e0;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        body.dark-mode .bubble {
+            background: #232c3a;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .bubble.user {
+            background: #1e4030;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .table-scroll {
+            background: #23272a;
+        }
+
+        body.dark-mode table {
+            background: #23272a;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode th,
+        body.dark-mode td {
+            border: 1px solid #444;
+        }
+
+        body.dark-mode tr:nth-child(even) {
+            background: #232c3a;
+        }
+
+        body.dark-mode tr:nth-child(odd) {
+            background: #23272a;
+        }
+
+        body.dark-mode button {
+            background: #444c5e;
+            color: #fff;
+        }
+
+        body.dark-mode button:hover {
+            background: #2563eb;
+        }
+
+        body.dark-mode input {
+            background: #23272a;
+            color: #e0e0e0;
+            border: 1px solid #444;
+        }
     </style>
 </head>
 
 <body>
     <div class="chat">
-        <h2 style="text-align:center; font-size:2em; margin-bottom: 20px;">🛍️ Asistente de Tienda IA</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h2 style="text-align:center; font-size:2em; margin-bottom: 0;">🛍️ Asistente de Tienda IA</h2>
+            <button id="themeToggle" onclick="toggleTheme()" style="margin-left: 20px; min-width: 120px;">Modo oscuro</button>
+        </div>
         <input id="question" placeholder="¿Qué productos se han vendido más?" style="width: 100%; padding: 12px;" />
         <button onclick="sendQuestion()">Preguntar</button>
+        <input type="file" id="fileInput" style="margin-top:10px;" />
+        <button onclick="uploadFile()" style="margin-left:10px;">Subir archivo</button>
         <div id="chatLog"></div>
         <div id="loader" class="loader" style="display:none;">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
@@ -185,10 +248,63 @@
             document.getElementById("loader").style.display = show ? "flex" : "none";
         }
 
-        // Inserta scroll solo en tablas
+        // Inserta scroll solo en tablas y agrega botón de descarga CSV
         function addTableScroll(html) {
-            // Busca la primera tabla y la envuelve en un div con clase table-scroll
-            return html.replace(/(<table[\s\S]*?<\/table>)/i, '<div class="table-scroll">$1</div>');
+            // Busca todas las tablas y las envuelve en un div con clase table-scroll y un botón de descarga
+            return html.replace(/(<table[\s\S]*?<\/table>)/gi, function(match, tableHtml, idx) {
+                const btn = `<button class='csv-download-btn' onclick='downloadTableCSV(this)' style='float:right; margin-bottom:8px;'>Descargar CSV</button>`;
+                return `<div class="table-scroll">${btn}${match}</div>`;
+            });
+        }
+
+        // Convierte la tabla HTML más cercana al botón en CSV y la descarga
+        function downloadTableCSV(btn) {
+            const table = btn.nextElementSibling;
+            if (!table) return;
+            let csv = [];
+            for (let row of table.rows) {
+                let rowData = [];
+                for (let cell of row.cells) {
+                    let text = cell.innerText.replace(/"/g, '""');
+                    rowData.push('"' + text + '"');
+                }
+                csv.push(rowData.join(","));
+            }
+            const csvContent = csv.join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tabla.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Convierte la tabla HTML más cercana al botón en CSV y la descarga
+        function downloadTableCSV(btn) {
+            const table = btn.nextElementSibling;
+            if (!table) return;
+            let csv = [];
+            for (let row of table.rows) {
+                let rowData = [];
+                for (let cell of row.cells) {
+                    let text = cell.innerText.replace(/"/g, '""');
+                    rowData.push('"' + text + '"');
+                }
+                csv.push(rowData.join(","));
+            }
+            const csvContent = csv.join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tabla.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         async function sendQuestion() {
@@ -223,9 +339,43 @@
             container.scrollIntoView({ behavior: 'smooth', block: 'end' });
         }
 
+        function toggleTheme() {
+            const body = document.body;
+            const btn = document.getElementById('themeToggle');
+            body.classList.toggle('dark-mode');
+            if (body.classList.contains('dark-mode')) {
+                btn.textContent = 'Modo claro';
+            } else {
+                btn.textContent = 'Modo oscuro';
+            }
+        }
+
         document.getElementById("question").addEventListener("keydown", function (e) {
             if (e.key === "Enter") sendQuestion();
         });
+
+        async function uploadFile() {
+            const input = document.getElementById('fileInput');
+            if (!input.files.length) {
+                alert('Selecciona un archivo para subir.');
+                return;
+            }
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            showLoader(true);
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                addMessage(`<b>Respuesta RAG:</b><br>${data.response}`);
+            } catch (e) {
+                addMessage("<span style='color:red'>Error al subir el archivo.</span>");
+            }
+            showLoader(false);
+        }
     </script>
 </body>
 

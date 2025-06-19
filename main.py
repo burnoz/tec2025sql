@@ -1,12 +1,13 @@
 import sqlite3
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import openai
 import os
 import re
+import shutil
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -97,3 +98,35 @@ def ask_question(req: QueryRequest):
         f"<div class='small' style='margin-top:18px; color:#555;'><b>Query SQL generado:</b><br><code style='font-size:0.95em'>{sql_query}</code></div>"
     )
     return {"response": respuesta}
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    try:
+        # Permitir archivos de texto y csv
+        if not (file.content_type.startswith("text") or file.filename.lower().endswith(".csv")):
+            return JSONResponse(content={"response": "Solo se permiten archivos de texto (.txt, .csv, etc.)."}, status_code=400)
+        # Guardar el archivo temporalmente
+        file_path = f"uploaded_{file.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        # Leer el archivo como texto
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                file_content = f.read()
+        except Exception as e:
+            os.remove(file_path)
+            return JSONResponse(content={"response": f"No se pudo leer el archivo como texto: {e}"}, status_code=400)
+        # Limitar tamaño para OpenAI
+        if len(file_content) > 12000:
+            os.remove(file_path)
+            return JSONResponse(content={"response": "El archivo es demasiado grande. Sube un archivo de texto más pequeño."}, status_code=400)
+        prompt = f"Usa el siguiente documento para resumir el contenido.\n\n{file_content}\n\nRespuesta:"
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        result = response.choices[0].message.content
+        os.remove(file_path)
+        return JSONResponse(content={"response": result})
+    except Exception as e:
+        return JSONResponse(content={"response": f"Error al procesar el archivo: {e}"}, status_code=500)
